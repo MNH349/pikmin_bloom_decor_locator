@@ -1,0 +1,241 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#2e7d32">
+<title>Pikmin Decor Finder · Taipei</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<style>
+  :root { --bg:#f4f7f4; --panel:#ffffff; --accent:#2e7d32; --text:#1b2a1b; }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  html,body { margin:0; height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:var(--text); }
+  #map { position:absolute; inset:0; }
+  .bar {
+    position:absolute; top:0; left:0; right:0; z-index:1000;
+    padding:calc(env(safe-area-inset-top) + 8px) 10px 8px;
+    background:linear-gradient(180deg,rgba(46,125,50,.96),rgba(46,125,50,.86));
+    color:#fff; display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+    box-shadow:0 2px 8px rgba(0,0,0,.2);
+  }
+  .bar h1 { font-size:15px; margin:0; font-weight:700; letter-spacing:.2px; white-space:nowrap; }
+  select, button {
+    font-size:14px; padding:8px 10px; border-radius:10px; border:none;
+    background:#fff; color:var(--text); font-weight:600;
+  }
+  select { flex:1 1 140px; min-width:0; }
+  button { background:#ffcf33; }
+  button:active { transform:scale(.97); }
+  .status {
+    position:absolute; left:10px; bottom:calc(env(safe-area-inset-bottom) + 10px); z-index:1000;
+    background:rgba(255,255,255,.95); padding:8px 12px; border-radius:12px;
+    font-size:13px; font-weight:600; box-shadow:0 2px 8px rgba(0,0,0,.18); max-width:70vw;
+  }
+  .fab {
+    position:absolute; right:10px; bottom:calc(env(safe-area-inset-bottom) + 10px); z-index:1000;
+    width:48px; height:48px; border-radius:50%; background:#fff; font-size:20px;
+    display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,.25);
+  }
+  .leaflet-popup-content { font-size:14px; line-height:1.35; }
+  .popup-decor { font-weight:700; font-size:15px; }
+  .popup-name { font-weight:600; margin:2px 0; }
+  .popup-tag { color:#666; font-size:12px; font-family:ui-monospace,monospace; }
+  .popup-links a { color:var(--accent); font-weight:600; text-decoration:none; margin-right:12px; }
+  .spin { display:inline-block; animation:sp 1s linear infinite; }
+  @keyframes sp { to { transform:rotate(360deg); } }
+</style>
+</head>
+<body>
+<div class="bar">
+  <h1>🌸 Decor</h1>
+  <select id="decorSelect"></select>
+  <button id="searchBtn">Search this area</button>
+</div>
+<div id="map"></div>
+<button class="fab" id="locateBtn" title="My location">📍</button>
+<div class="status" id="status">Pick a decor type, then “Search this area”.</div>
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+/* ---- Decor → OpenStreetMap tag mapping (from pikminwiki.com/Decor_Pikmin) ----
+   Ordered by specificity: the FIRST rule that matches a POI's tags wins.
+   cuisine-based decors are listed first so a "restaurant" tagged cuisine=sushi
+   resolves to Sushi rather than the generic Restaurant. */
+const DECOR_RULES = [
+  // --- cuisine specialisations (highest priority) ---
+  { name:"Sushi Restaurant", emoji:"🍣", color:"#e91e63", tags:[["cuisine","sushi"]] },
+  { name:"Ramen Restaurant", emoji:"🍜", color:"#ff7043", tags:[["cuisine","chinese"],["cuisine","noodle"],["cuisine","ramen"],["cuisine","udon"],["cuisine","soba"]] },
+  { name:"Italian Restaurant", emoji:"🍕", color:"#c62828", tags:[["cuisine","pizza"],["cuisine","mediterranean"],["cuisine","italian"]] },
+  { name:"Curry Restaurant", emoji:"🍛", color:"#f9a825", tags:[["cuisine","curry"],["cuisine","indian"],["cuisine","sri_lankan"]] },
+  { name:"Mexican Restaurant", emoji:"🌮", color:"#8d6e63", tags:[["cuisine","mexican"]] },
+  { name:"Korean Restaurant", emoji:"🍲", color:"#d84315", tags:[["cuisine","korean"]] },
+  // --- shops (specific) ---
+  { name:"Sweetshop", emoji:"🍬", color:"#f06292", tags:[["shop","pastry"]] },
+  { name:"Bakery", emoji:"🥐", color:"#c69c6d", tags:[["shop","bakery"]] },
+  { name:"Art Gallery", emoji:"🎨", color:"#7e57c2", tags:[["shop","art"]] },
+  { name:"Hair Salon", emoji:"💇", color:"#ec407a", tags:[["shop","hairdresser"]] },
+  { name:"Clothes Store", emoji:"👕", color:"#5c6bc0", tags:[["shop","clothes"],["shop","shoes"]] },
+  { name:"Corner Store", emoji:"🏪", color:"#26a69a", tags:[["shop","convenience"]] },
+  { name:"Supermarket", emoji:"🛒", color:"#66bb6a", tags:[["shop","supermarket"]] },
+  { name:"Library & Bookstore", emoji:"📚", color:"#8d6e63", tags:[["shop","books"],["amenity","library"]] },
+  { name:"Makeup Store", emoji:"💄", color:"#ad1457", tags:[["shop","department_store"]] },
+  { name:"Appliances Store", emoji:"🔌", color:"#455a64", tags:[["shop","appliance"],["shop","computer"],["shop","electronics"]] },
+  { name:"DIY Store", emoji:"🔧", color:"#6d4c41", tags:[["shop","doityourself"],["shop","hardware"]] },
+  { name:"Laundromat", emoji:"🧺", color:"#4dd0e1", tags:[["shop","laundry"],["shop","dry_cleaning"]] },
+  { name:"Stationery Store", emoji:"✏️", color:"#9575cd", tags:[["shop","stationery"],["shop","craft"]] },
+  // --- amenities & food (generic) ---
+  { name:"Burger Place", emoji:"🍔", color:"#ff9800", tags:[["amenity","fast_food"]] },
+  { name:"Café", emoji:"☕", color:"#795548", tags:[["amenity","cafe"]] },
+  { name:"Restaurant", emoji:"🍽️", color:"#ef5350", tags:[["amenity","restaurant"]] },
+  { name:"Movie Theater", emoji:"🎬", color:"#5e35b1", tags:[["amenity","cinema"]] },
+  { name:"Pharmacy", emoji:"💊", color:"#26c6da", tags:[["amenity","pharmacy"]] },
+  { name:"Post Office", emoji:"📮", color:"#e53935", tags:[["amenity","post_office"]] },
+  { name:"University & College", emoji:"🎓", color:"#3949ab", tags:[["amenity","university"],["amenity","college"]] },
+  { name:"Shrine & Temple", emoji:"⛩️", color:"#d32f2f", tags:[["amenity","place_of_worship"]] },
+  // --- leisure / tourism ---
+  { name:"Park", emoji:"🌳", color:"#43a047", tags:[["leisure","park"]] },
+  { name:"Stadium", emoji:"🏟️", color:"#00897b", tags:[["leisure","stadium"]] },
+  { name:"Zoo", emoji:"🦁", color:"#fbc02d", tags:[["tourism","zoo"]] },
+  { name:"Theme Park", emoji:"🎡", color:"#f4511e", tags:[["tourism","theme_park"]] },
+  { name:"Hotel", emoji:"🏨", color:"#5c6bc0", tags:[["tourism","hotel"]] },
+  // --- transport ---
+  { name:"Station", emoji:"🚉", color:"#455a64", tags:[["railway","station"],["building","train_station"]] },
+  { name:"Bus Stop", emoji:"🚏", color:"#78909c", tags:[["highway","bus_stop"]] },
+  { name:"Airport", emoji:"✈️", color:"#0277bd", tags:[["aeroway","aerodrome"]] },
+  // --- nature ---
+  { name:"Waterside", emoji:"💧", color:"#039be5", tags:[["natural","water"]] },
+  { name:"Beach", emoji:"🏖️", color:"#fdd835", tags:[["natural","beach"]] },
+  { name:"Forest", emoji:"🌲", color:"#2e7d32", tags:[["natural","wood"],["landuse","forest"]] },
+  { name:"Mountain", emoji:"⛰️", color:"#6d4c41", tags:[["natural","peak"]] },
+  { name:"Bridge", emoji:"🌉", color:"#8d6e63", tags:[["bridge","yes"]] },
+];
+
+/* Resolve a POI's tag object to a decor rule (or null). cuisine values can be
+   semicolon-separated, e.g. "sushi;japanese". */
+function resolveDecor(tags) {
+  const cuisines = (tags.cuisine || "").split(";").map(s => s.trim());
+  for (const rule of DECOR_RULES) {
+    for (const [k, v] of rule.tags) {
+      if (k === "cuisine") {
+        if (cuisines.includes(v)) return rule;
+      } else if (tags[k] === v) {
+        return rule;
+      }
+    }
+  }
+  return null;
+}
+
+/* ---------- Map setup ---------- */
+const map = L.map("map", { zoomControl:false }).setView([25.0375, 121.5637], 15); // Taipei Main Station
+L.control.zoom({ position:"topright" }).addTo(map);
+L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+  maxZoom:19, attribution:'© OpenStreetMap'
+}).addTo(map);
+
+/* ---------- Decor filter dropdown ---------- */
+const sel = document.getElementById("decorSelect");
+sel.innerHTML = '<option value="__all">All decor types</option>' +
+  DECOR_RULES.map((r,i) => `<option value="${i}">${r.emoji} ${r.name}</option>`).join("");
+
+/* ---------- Overpass query ---------- */
+const OVERPASS = ["https://overpass-api.de/api/interpreter","https://overpass.kumi.systems/api/interpreter"];
+let layer = L.layerGroup().addTo(map);
+const statusEl = document.getElementById("status");
+const setStatus = html => statusEl.innerHTML = html;
+
+function buildQuery(rules, b) {
+  const bbox = `${b.getSouth()},${b.getWest()},${b.getNorth()},${b.getEast()}`;
+  const seen = new Set(), stmts = [];
+  for (const r of rules) for (const [k,v] of r.tags) {
+    const s = `nwr["${k}"="${v}"](${bbox});`;
+    if (!seen.has(s)) { seen.add(s); stmts.push(s); }
+  }
+  return `[out:json][timeout:40];(${stmts.join("")});out center tags;`;
+}
+
+// Overpass can return HTTP 200 with an empty result + a "remark" when the
+// server-side query times out or is throttled. Treat that as a retryable error
+// so we fall through to the mirror / retry instead of showing "0 results".
+async function overpassFetch(query) {
+  let lastErr;
+  for (let pass = 0; pass < 2; pass++) {
+    for (const url of OVERPASS) {
+      try {
+        const res = await fetch(url, { method:"POST", body:"data="+encodeURIComponent(query) });
+        if (!res.ok) throw new Error("HTTP "+res.status);
+        const json = await res.json();
+        if ((!json.elements || !json.elements.length) && json.remark) {
+          throw new Error("overpass busy: "+json.remark);
+        }
+        return json;
+      } catch (e) { lastErr = e; }
+    }
+    await new Promise(r => setTimeout(r, 1500)); // brief backoff before retrying
+  }
+  throw lastErr;
+}
+
+let inFlight = false;
+async function search() {
+  if (inFlight) return;                       // don't let searches pile up
+  if (map.getZoom() < 13) {
+    setStatus("🔍 Zoom in a bit more, then search."); return;
+  }
+  const choice = sel.value;
+  const rules = choice === "__all" ? DECOR_RULES : [DECOR_RULES[+choice]];
+  const heavy = choice === "__all";
+  inFlight = true;
+  setStatus('<span class="spin">⏳</span> Searching OpenStreetMap…' + (heavy ? " (all types, ~15s)" : ""));
+  try {
+    const data = await overpassFetch(buildQuery(rules, map.getBounds()));
+    layer.clearLayers();
+    let count = 0;
+    for (const el of data.elements) {
+      const lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon;
+      if (lat == null || lon == null || !el.tags) continue;
+      const decor = resolveDecor(el.tags);
+      if (!decor) continue;
+      if (choice !== "__all" && decor !== DECOR_RULES[+choice]) continue;
+      count++;
+      const name = el.tags["name:en"] || el.tags.name || "(unnamed)";
+      const matched = decor.tags.find(([k,v]) =>
+        k==="cuisine" ? (el.tags.cuisine||"").split(";").includes(v) : el.tags[k]===v);
+      L.circleMarker([lat,lon], {
+        radius:8, color:"#fff", weight:2, fillColor:decor.color, fillOpacity:.95
+      }).bindPopup(
+        `<div class="popup-decor">${decor.emoji} ${decor.name}</div>`+
+        `<div class="popup-name">${name}</div>`+
+        `<div class="popup-tag">${matched[0]}=${matched[1]}</div>`+
+        `<div class="popup-links" style="margin-top:6px">`+
+          `<a href="https://maps.apple.com/?q=${lat},${lon}">Apple Maps</a>`+
+          `<a href="https://www.google.com/maps/search/?api=1&query=${lat},${lon}">Google</a>`+
+        `</div>`
+      ).addTo(layer);
+    }
+    const label = choice === "__all" ? "decor sites" : DECOR_RULES[+choice].name + " sites";
+    setStatus(count ? `✅ ${count} ${label} in view` : `No ${label} found in view`);
+  } catch (e) {
+    setStatus("⚠️ Overpass server busy — tap “Search this area” to retry.");
+  } finally {
+    inFlight = false;
+  }
+}
+
+document.getElementById("searchBtn").addEventListener("click", search);
+sel.addEventListener("change", search);
+document.getElementById("locateBtn").addEventListener("click", () => {
+  setStatus('<span class="spin">📍</span> Locating…');
+  map.locate({ setView:true, maxZoom:16 });
+});
+map.on("locationfound", () => search());
+map.on("locationerror", () => setStatus("⚠️ Couldn’t get your location."));
+
+// initial search
+map.whenReady(search);
+</script>
+</body>
+</html>
