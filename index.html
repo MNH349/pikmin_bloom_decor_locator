@@ -24,9 +24,10 @@
     box-shadow:0 2px 8px rgba(0,0,0,.2);
   }
   .bar h1 { font-size:15px; margin:0; font-weight:700; letter-spacing:.2px; white-space:nowrap; }
-  select, button {
+  select, button, input {
     font-size:14px; padding:8px 10px; border-radius:10px; border:none;
-    background:#fff; color:var(--text); font-weight:600;
+    background:#fff; color:var(--text); font-weight:600; font-family:inherit;
+    -webkit-appearance:none; appearance:none; /* stop iOS native chrome (the doubled "yellow square" look) */
   }
   select { flex:1 1 140px; min-width:0; }
   button { background:#ffcf33; transition:background .15s, opacity .15s; }
@@ -50,6 +51,17 @@
     width:48px; height:48px; border-radius:50%; background:#fff; font-size:20px;
     display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,.25);
   }
+  #placeSearch { flex:1 1 150px; min-width:0; font-weight:500; }
+  .place-results {
+    position:absolute; top:100%; left:10px; right:10px; z-index:1200;
+    background:#fff; border-radius:0 0 12px 12px; overflow:hidden;
+    box-shadow:0 6px 14px rgba(0,0,0,.28); max-height:55vh; overflow-y:auto;
+  }
+  .place-results:empty { display:none; }
+  .place-results div { padding:10px 12px; font-size:13px; color:var(--text); border-bottom:1px solid #eee; cursor:pointer; }
+  .place-results div:last-child { border-bottom:none; }
+  .place-results div:active, .place-results div.hint { background:#f2f5f2; }
+  .place-results div.hint { color:#888; font-style:italic; cursor:default; }
   .leaflet-popup-content { font-size:14px; line-height:1.35; }
   .popup-decor { font-weight:700; font-size:15px; }
   .popup-name { font-weight:600; margin:2px 0; }
@@ -63,8 +75,10 @@
 <body>
 <div class="bar">
   <h1>🔍🌸 Decor <span class="ver" id="ver"></span></h1>
+  <input id="placeSearch" type="text" inputmode="search" autocomplete="off" placeholder="🔎 Find a place or landmark…">
   <select id="decorSelect"></select>
   <button id="searchBtn">Search this area</button>
+  <div class="place-results" id="placeResults"></div>
 </div>
 <div id="map"></div>
 <button class="fab" id="locateBtn" title="My location">📍</button>
@@ -143,7 +157,7 @@ function resolveDecor(tags) {
 }
 
 /* ---------- Version (bump on every release) ---------- */
-const APP_VERSION = "v6";
+const APP_VERSION = "v7";
 document.getElementById("ver").textContent = APP_VERSION;
 
 /* ---------- Map setup ---------- */
@@ -208,6 +222,9 @@ async function overpassFetch(query) {
 }
 
 let inFlight = false;
+// Self-calibrating time estimate (ms), seeded then updated with each real query.
+const lastMs = { all: 15000, single: 6000 };
+let timer = null;
 async function search() {
   if (inFlight) return;                       // don't let searches pile up
   if (map.getZoom() < 13) {
@@ -216,10 +233,18 @@ async function search() {
   const choice = sel.value;
   const rules = choice === "__all" ? DECOR_RULES : [DECOR_RULES[+choice]];
   const heavy = choice === "__all";
+  const mode = heavy ? "all" : "single";
   inFlight = true;
   const btn = document.getElementById("searchBtn");
   btn.classList.add("loading"); btn.disabled = true; btn.textContent = "Searching…";
-  setStatus('<span class="spin">⏳</span> Searching OpenStreetMap…' + (heavy ? " (all types, ~15s)" : ""));
+  // Live elapsed counter vs a rolling estimate, refreshed ~5x/sec.
+  const t0 = performance.now();
+  const est = Math.max(2, Math.round(lastMs[mode] / 1000));
+  clearInterval(timer);
+  timer = setInterval(() => {
+    const s = ((performance.now() - t0) / 1000).toFixed(1);
+    setStatus(`<span class="spin">⏳</span> Searching… ${s}s <span style="opacity:.7">/ ~${est}s est</span>`);
+  }, 200);
   try {
     const data = await overpassFetch(buildQuery(rules, map.getBounds()));
     layer.clearLayers();
@@ -255,6 +280,8 @@ async function search() {
   } catch (e) {
     setStatus("⚠️ Overpass server busy — tap “Search this area” to retry.");
   } finally {
+    clearInterval(timer);
+    lastMs[mode] = performance.now() - t0;   // calibrate estimate from the real duration
     inFlight = false;
     btn.classList.remove("loading"); btn.disabled = false; btn.textContent = "Search this area";
   }
@@ -275,6 +302,66 @@ document.getElementById("locateBtn").addEventListener("click", () => {
 map.on("locationfound", () => search());
 map.on("locationerror", (e) =>
   setStatus("⚠️ Couldn’t get your location" + (e && e.message ? " (" + e.message + ")" : "") + "."));
+
+/* ---------- Place / landmark search (Nominatim geocoder) ---------- */
+const placeInput = document.getElementById("placeSearch");
+const placeResults = document.getElementById("placeResults");
+let placeTimer = null, placeSeq = 0;
+
+function clearPlaceResults() { placeResults.innerHTML = ""; }
+
+async function geocode(q) {
+  // Bias toward the current view but don't restrict — works anywhere in the world.
+  const b = map.getBounds();
+  const viewbox = `${b.getWest()},${b.getNorth()},${b.getEast()},${b.getSouth()}`;
+  const url = `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=6&addressdetails=0`
+            + `&viewbox=${viewbox}&q=${encodeURIComponent(q)}`;
+  const res = await fetch(url, { headers: { "Accept-Language": navigator.language || "en" } });
+  if (!res.ok) throw new Error("geocoder HTTP " + res.status);
+  return res.json();
+}
+
+function renderPlaceResults(items) {
+  if (!items.length) { placeResults.innerHTML = '<div class="hint">No matching places</div>'; return; }
+  placeResults.innerHTML = "";
+  for (const it of items) {
+    const div = document.createElement("div");
+    div.textContent = it.display_name;
+    div.addEventListener("click", () => {
+      map.setView([+it.lat, +it.lon], 16, { animate:false });
+      clearPlaceResults();
+      placeInput.blur();
+      const short = it.display_name.split(",")[0];
+      setStatus(`📍 Moved to ${short}. Tap “Search this area” for decor here.`);
+    });
+    placeResults.appendChild(div);
+  }
+}
+
+async function runPlaceSearch() {
+  const q = placeInput.value.trim();
+  if (q.length < 3) { clearPlaceResults(); return; }
+  const seq = ++placeSeq;
+  placeResults.innerHTML = '<div class="hint">Searching…</div>';
+  try {
+    const items = await geocode(q);
+    if (seq !== placeSeq) return;             // a newer keystroke superseded this
+    renderPlaceResults(items);
+  } catch (e) {
+    if (seq === placeSeq) placeResults.innerHTML = '<div class="hint">Place search unavailable</div>';
+  }
+}
+
+placeInput.addEventListener("input", () => {
+  clearTimeout(placeTimer);
+  placeTimer = setTimeout(runPlaceSearch, 450);   // debounce (respects Nominatim rate limits)
+});
+placeInput.addEventListener("keydown", (e) => {
+  if (e.key === "Enter") { e.preventDefault(); clearTimeout(placeTimer); runPlaceSearch(); }
+  if (e.key === "Escape") { clearPlaceResults(); placeInput.blur(); }
+});
+// Tapping the map dismisses the results list.
+map.on("click", clearPlaceResults);
 
 // initial search
 map.whenReady(search);
