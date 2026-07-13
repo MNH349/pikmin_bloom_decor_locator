@@ -9,6 +9,8 @@
 <title>Pikmin Decor Finder · Taipei</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
+<link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
 <style>
   :root { --bg:#f4f7f4; --panel:#ffffff; --accent:#2e7d32; --text:#1b2a1b; }
   * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
@@ -59,6 +61,7 @@
 <div class="status" id="status">Pick a decor type, then “Search this area”.</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
 <script>
 /* ---- Decor → OpenStreetMap tag mapping (from pikminwiki.com/Decor_Pikmin) ----
    Ordered by specificity: the FIRST rule that matches a POI's tags wins.
@@ -143,7 +146,12 @@ sel.innerHTML = '<option value="__all">All decor types</option>' +
 
 /* ---------- Overpass query ---------- */
 const OVERPASS = ["https://overpass-api.de/api/interpreter","https://overpass.kumi.systems/api/interpreter"];
-let layer = L.layerGroup().addTo(map);
+let layer = L.markerClusterGroup({
+  maxClusterRadius: 50,
+  spiderfyOnMaxZoom: true,
+  disableClusteringAtZoom: 18,
+  chunkedLoading: true
+}).addTo(map);
 const statusEl = document.getElementById("status");
 const setStatus = html => statusEl.innerHTML = html;
 
@@ -228,11 +236,18 @@ async function search() {
 document.getElementById("searchBtn").addEventListener("click", search);
 sel.addEventListener("change", search);
 document.getElementById("locateBtn").addEventListener("click", () => {
+  // Browsers only allow geolocation on secure origins (https:// or localhost).
+  // On a LAN-IP local test (http://192.168.x.x) it's blocked — explain that.
+  if (!window.isSecureContext) {
+    setStatus("📍 Location needs HTTPS. Works once deployed (GitHub Pages) or via localhost.");
+    return;
+  }
   setStatus('<span class="spin">📍</span> Locating…');
-  map.locate({ setView:true, maxZoom:16 });
+  map.locate({ setView:true, maxZoom:16, enableHighAccuracy:true });
 });
 map.on("locationfound", () => search());
-map.on("locationerror", () => setStatus("⚠️ Couldn’t get your location."));
+map.on("locationerror", (e) =>
+  setStatus("⚠️ Couldn’t get your location" + (e && e.message ? " (" + e.message + ")" : "") + "."));
 
 // initial search
 map.whenReady(search);
