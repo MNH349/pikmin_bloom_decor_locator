@@ -6,7 +6,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#2e7d32">
-<title>Pikmin Decor Finder · Taipei</title>
+<title>Pikmin Decor Finder · Northern Taiwan</title>
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
@@ -57,11 +57,13 @@
   .popup-links a { color:var(--accent); font-weight:600; text-decoration:none; margin-right:12px; }
   .spin { display:inline-block; animation:sp 1s linear infinite; }
   @keyframes sp { to { transform:rotate(360deg); } }
+  .ver { font-size:10px; font-weight:600; opacity:.75; margin-left:2px; vertical-align:super; }
 </style>
 </head>
 <body>
 <div class="bar">
-  <h1>🌸 Decor</h1>
+  <h1>🌸 Decor <span class="ver" id="ver"></span></h1>
+  <select id="regionSelect"></select>
   <select id="decorSelect"></select>
   <button id="searchBtn">Search this area</button>
 </div>
@@ -141,6 +143,10 @@ function resolveDecor(tags) {
   return null;
 }
 
+/* ---------- Version (bump on every release) ---------- */
+const APP_VERSION = "v5";
+document.getElementById("ver").textContent = APP_VERSION;
+
 /* ---------- Map setup ---------- */
 const map = L.map("map", { zoomControl:false }).setView([25.0375, 121.5637], 15); // Taipei Main Station
 L.control.zoom({ position:"bottomright" }).addTo(map);
@@ -148,10 +154,30 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom:19, attribution:'© OpenStreetMap'
 }).addTo(map);
 
+/* ---------- Region quick-jump (whole-county bounds: [[S,W],[N,E]]) ---------- */
+const REGIONS = {
+  "Taipei City":     [[24.95,121.45],[25.21,121.67]],
+  "New Taipei City": [[24.67,121.29],[25.30,122.01]],
+  "Taoyuan":         [[24.59,120.96],[25.13,121.46]],
+  "Hsinchu":         [[24.40,120.85],[24.94,121.42]],
+  "Yilan":           [[24.30,121.30],[25.01,122.02]],
+};
+const regionSel = document.getElementById("regionSelect");
+regionSel.innerHTML = '<option value="">📍 Jump to region…</option>' +
+  Object.keys(REGIONS).map(n => `<option value="${n}">${n}</option>`).join("");
+regionSel.addEventListener("change", () => {
+  const b = REGIONS[regionSel.value];
+  if (!b) return;
+  map.fitBounds(b);
+  setStatus(`🗺️ Showing all of ${regionSel.value}. Zoom in, then tap “Search this area”.`);
+});
+
 /* ---------- Decor filter dropdown ---------- */
 const sel = document.getElementById("decorSelect");
 sel.innerHTML = '<option value="__all">All decor types</option>' +
   DECOR_RULES.map((r,i) => `<option value="${i}">${r.emoji} ${r.name}</option>`).join("");
+// Default to a single light decor so the initial search is fast (not the heavy "All").
+sel.value = String(DECOR_RULES.findIndex(r => r.name === "Corner Store"));
 
 /* ---------- Overpass query ---------- */
 const OVERPASS = ["https://overpass-api.de/api/interpreter","https://overpass.kumi.systems/api/interpreter"];
