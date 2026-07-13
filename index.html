@@ -62,8 +62,7 @@
 </head>
 <body>
 <div class="bar">
-  <h1>🌸 Decor <span class="ver" id="ver"></span></h1>
-  <select id="regionSelect"></select>
+  <h1>🔍🌸 Decor <span class="ver" id="ver"></span></h1>
   <select id="decorSelect"></select>
   <button id="searchBtn">Search this area</button>
 </div>
@@ -144,7 +143,7 @@ function resolveDecor(tags) {
 }
 
 /* ---------- Version (bump on every release) ---------- */
-const APP_VERSION = "v5";
+const APP_VERSION = "v6";
 document.getElementById("ver").textContent = APP_VERSION;
 
 /* ---------- Map setup ---------- */
@@ -154,30 +153,16 @@ L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom:19, attribution:'© OpenStreetMap'
 }).addTo(map);
 
-/* ---------- Region quick-jump (whole-county bounds: [[S,W],[N,E]]) ---------- */
-const REGIONS = {
-  "Taipei City":     [[24.95,121.45],[25.21,121.67]],
-  "New Taipei City": [[24.67,121.29],[25.30,122.01]],
-  "Taoyuan":         [[24.59,120.96],[25.13,121.46]],
-  "Hsinchu":         [[24.40,120.85],[24.94,121.42]],
-  "Yilan":           [[24.30,121.30],[25.01,122.02]],
-};
-const regionSel = document.getElementById("regionSelect");
-regionSel.innerHTML = '<option value="">📍 Jump to region…</option>' +
-  Object.keys(REGIONS).map(n => `<option value="${n}">${n}</option>`).join("");
-regionSel.addEventListener("change", () => {
-  const b = REGIONS[regionSel.value];
-  if (!b) return;
-  map.fitBounds(b);
-  setStatus(`🗺️ Showing all of ${regionSel.value}. Zoom in, then tap “Search this area”.`);
-});
-
 /* ---------- Decor filter dropdown ---------- */
 const sel = document.getElementById("decorSelect");
+const cornerIdx = DECOR_RULES.findIndex(r => r.name === "Corner Store");
+const optionFor = i => `<option value="${i}">${DECOR_RULES[i].emoji} ${DECOR_RULES[i].name}</option>`;
+const otherIdxs = DECOR_RULES.map((_, i) => i).filter(i => i !== cornerIdx);
+// Corner Store pinned right below "All decor types"; the rest keep their original order.
 sel.innerHTML = '<option value="__all">All decor types</option>' +
-  DECOR_RULES.map((r,i) => `<option value="${i}">${r.emoji} ${r.name}</option>`).join("");
-// Default to a single light decor so the initial search is fast (not the heavy "All").
-sel.value = String(DECOR_RULES.findIndex(r => r.name === "Corner Store"));
+  optionFor(cornerIdx) + otherIdxs.map(optionFor).join("");
+// Default to Corner Store so the initial search is fast (not the heavy "All").
+sel.value = String(cornerIdx);
 
 /* ---------- Overpass query ---------- */
 const OVERPASS = ["https://overpass-api.de/api/interpreter","https://overpass.kumi.systems/api/interpreter"];
@@ -276,7 +261,7 @@ async function search() {
 }
 
 document.getElementById("searchBtn").addEventListener("click", search);
-sel.addEventListener("change", search);
+// Changing decor type no longer auto-searches — user taps "Search this area".
 document.getElementById("locateBtn").addEventListener("click", () => {
   // Browsers only allow geolocation on secure origins (https:// or localhost).
   // On a LAN-IP local test (http://192.168.x.x) it's blocked — explain that.
