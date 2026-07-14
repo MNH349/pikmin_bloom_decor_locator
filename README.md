@@ -3,8 +3,7 @@
 A mobile web app that shows which real-world sites will give which
 **Decor Pikmin** in Pikmin Bloom. It reads live OpenStreetMap data (the same
 source Niantic derives decor from) and maps each point of interest to its decor
-type. The handling priority is set correctly (e.g. a restaurant tagged `cuisine=sushi`
-resolves to **Sushi**, not the generic **Restaurant**).
+type. 
 
 ## Features
 - Interactive Leaflet map centered on Taipei Main Station (subject to change)
@@ -33,3 +32,4 @@ etc.) take priority over generic restaurants (Chef Hat).
 - Uses the free public **Overpass API**. The search time depends on the server speed of OSM
   - v9 uses parallel querying and caching to improve search speed, but ultimately still depends on the server
 - Requires zoom level ≥ 16 before it searches, to keep queries reasonable.
+- The newer version of the app will be automatically deployed if you save it on the home screen
