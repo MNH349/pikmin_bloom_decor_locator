@@ -1,171 +1,194 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
+  
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="theme-color" content="#2e7d32">
-<title>Pikmin Decor Finder · Northern Taiwan</title>
+
+<title>Pikmin Decor Finder</title>
+
 <link rel="manifest" href="manifest.webmanifest">
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css">
 <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css">
+
 <style>
-  :root { --bg:#f4f7f4; --panel:#ffffff; --accent:#2e7d32; --text:#1b2a1b; }
-  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
-  html,body { margin:0; height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:var(--text); }
-  #map { position:absolute; inset:0; }
-  .bar {
-    position:absolute; top:0; left:0; right:0; z-index:1000;
-    padding:calc(env(safe-area-inset-top) + 8px) 10px 8px;
-    background:linear-gradient(180deg,rgba(46,125,50,.96),rgba(46,125,50,.86));
-    color:#fff; display:flex; gap:8px; align-items:center; flex-wrap:wrap;
-    box-shadow:0 2px 8px rgba(0,0,0,.2);
-  }
-  .bar h1 { font-size:15px; margin:0; font-weight:700; letter-spacing:.2px; white-space:nowrap; }
-  select, button, input {
-    font-size:14px; padding:8px 10px; border-radius:10px; border:none;
-    background:#fff; color:var(--text); font-weight:600; font-family:inherit;
-    -webkit-appearance:none; appearance:none; /* stop iOS native chrome (the doubled "yellow square" look) */
-  }
-  select { flex:1 1 140px; min-width:0; }
-  button { background:#ffcf33; transition:background .15s, opacity .15s; }
-  button:active { transform:scale(.97); }
-  button.loading { background:#e0e0e0; color:#666; }
-  button:disabled { opacity:.85; }
-  /* Decor markers: category emoji on a colored badge, echoing the wiki's per-decor icons */
-  .decor-pin { background:none; border:none; }
-  .decor-pin-inner {
-    width:30px; height:30px; border-radius:50%; border:2px solid #fff;
-    display:flex; align-items:center; justify-content:center; font-size:16px; line-height:1;
-    box-shadow:0 1px 4px rgba(0,0,0,.4);
-  }
-  .status {
-    position:absolute; left:10px; bottom:calc(env(safe-area-inset-bottom) + 10px); z-index:1000;
-    background:rgba(255,255,255,.95); padding:8px 12px; border-radius:12px;
-    font-size:13px; font-weight:600; box-shadow:0 2px 8px rgba(0,0,0,.18); max-width:70vw;
-  }
-  .fab {
-    position:absolute; right:10px; bottom:calc(env(safe-area-inset-bottom) + 90px); z-index:1000;
-    width:48px; height:48px; border-radius:50%; background:#fff; font-size:20px;
-    display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,.25);
-  }
-  #placeSearch { flex:1 1 150px; min-width:0; font-weight:500; }
-  .place-results {
-    position:absolute; top:100%; left:10px; right:10px; z-index:1200;
-    background:#fff; border-radius:0 0 12px 12px; overflow:hidden;
-    box-shadow:0 6px 14px rgba(0,0,0,.28); max-height:55vh; overflow-y:auto;
-  }
-  .place-results:empty { display:none; }
-  .place-results div { padding:10px 12px; font-size:13px; color:var(--text); border-bottom:1px solid #eee; cursor:pointer; }
-  .place-results div:last-child { border-bottom:none; }
-  .place-results div:active, .place-results div.hint { background:#f2f5f2; }
-  .place-results div.hint { color:#888; font-style:italic; cursor:default; }
-  .leaflet-popup-content { font-size:14px; line-height:1.35; }
-  .popup-decor { font-weight:700; font-size:15px; }
-  .popup-name { font-weight:600; margin:2px 0; }
-  .popup-tag { color:#666; font-size:12px; font-family:ui-monospace,monospace; }
-  .popup-links a { color:var(--accent); font-weight:600; text-decoration:none; margin-right:12px; }
-  .spin { display:inline-block; animation:sp 1s linear infinite; }
-  @keyframes sp { to { transform:rotate(360deg); } }
-  .ver { font-size:10px; font-weight:600; opacity:.75; margin-left:2px; vertical-align:super; }
+    :root { --bg:#f4f7f4; --panel:#ffffff; --accent:#2e7d32; --text:#1b2a1b; }
+    * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+    html,body { margin:0; height:100%; font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif; color:var(--text); }
+    #map { position:absolute; inset:0; }
+    .bar {
+      position:absolute; top:0; left:0; right:0; z-index:1000;
+      padding:calc(env(safe-area-inset-top) + 8px) 10px 8px;
+      background:linear-gradient(180deg,rgba(46,125,50,.96),rgba(46,125,50,.86));
+      color:#fff; display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+      box-shadow:0 2px 8px rgba(0,0,0,.2);
+    }
+    .bar h1 { font-size:15px; margin:0; font-weight:700; letter-spacing:.2px; white-space:nowrap; }
+    select, button, input {
+      font-size:14px; padding:8px 10px; border-radius:10px; border:none;
+      background:#fff; color:var(--text); font-weight:600; font-family:inherit;
+      -webkit-appearance:none; appearance:none; /* stop iOS native chrome (the doubled "yellow square" look) */
+    }
+    select { flex:1 1 140px; min-width:0; }
+    button { background:#ffcf33; transition:background .15s, opacity .15s; }
+    button:active { transform:scale(.97); }
+    button.loading { background:#e0e0e0; color:#666; }
+    button:disabled { opacity:.85; }
+    /* Decor markers: category emoji on a colored badge, echoing the wiki's per-decor icons */
+    .decor-pin { background:none; border:none; }
+    .decor-pin-inner {
+      width:30px; height:30px; border-radius:50%; border:2px solid #fff;
+      display:flex; align-items:center; justify-content:center; font-size:16px; line-height:1;
+      box-shadow:0 1px 4px rgba(0,0,0,.4);
+    }
+    .status {
+      position:absolute; left:10px; bottom:calc(env(safe-area-inset-bottom) + 10px); z-index:1000;
+      background:rgba(255,255,255,.95); padding:8px 12px; border-radius:12px;
+      font-size:13px; font-weight:600; box-shadow:0 2px 8px rgba(0,0,0,.18); max-width:70vw;
+    }
+    .fab {
+      position:absolute; right:10px; bottom:calc(env(safe-area-inset-bottom) + 90px); z-index:1000;
+      width:48px; height:48px; border-radius:50%; background:#fff; font-size:20px;
+      display:flex; align-items:center; justify-content:center; box-shadow:0 2px 8px rgba(0,0,0,.25);
+    }
+    .zoombadge {
+      position:absolute; right:64px; bottom:calc(env(safe-area-inset-bottom) + 20px); z-index:1000;
+      background:rgba(255,255,255,.92); padding:4px 9px; border-radius:10px;
+      font-size:12px; font-weight:700; color:var(--text); box-shadow:0 1px 4px rgba(0,0,0,.22);
+    }
+    .zoombadge.low { background:#ffd7d7; color:#a11; }   /* too zoomed out to search (< 13) */
+    #placeSearch { flex:1 1 150px; min-width:0; font-weight:500; }
+    .place-results {
+      position:absolute; top:100%; left:10px; right:10px; z-index:1200;
+      background:#fff; border-radius:0 0 12px 12px; overflow:hidden;
+      box-shadow:0 6px 14px rgba(0,0,0,.28); max-height:55vh; overflow-y:auto;
+    }
+    .place-results:empty { display:none; }
+    .place-results div { padding:10px 12px; font-size:13px; color:var(--text); border-bottom:1px solid #eee; cursor:pointer; }
+    .place-results div:last-child { border-bottom:none; }
+    .place-results div:active, .place-results div.hint { background:#f2f5f2; }
+    .place-results div.hint { color:#888; font-style:italic; cursor:default; }
+    .leaflet-popup-content { font-size:14px; line-height:1.35; }
+    .popup-decor { font-weight:700; font-size:15px; }
+    .popup-name { font-weight:600; margin:2px 0; }
+    .popup-tag { color:#666; font-size:12px; font-family:ui-monospace,monospace; }
+    .popup-links a { color:var(--accent); font-weight:600; text-decoration:none; margin-right:12px; }
+    .spin { display:inline-block; animation:sp 1s linear infinite; }
+    @keyframes sp { to { transform:rotate(360deg); } }
+    .ver { font-size:10px; font-weight:600; opacity:.75; margin-left:2px; vertical-align:super; }
 </style>
 </head>
+
 <body>
 <div class="bar">
-  <h1>🔍🌸 Decor <span class="ver" id="ver"></span></h1>
-  <input id="placeSearch" type="text" inputmode="search" autocomplete="off" placeholder="🔎 Find a place or landmark…">
-  <select id="decorSelect"></select>
-  <button id="searchBtn">Search this area</button>
-  <div class="place-results" id="placeResults"></div>
+    <h1>🔍🌸 Decor <span class="ver" id="ver"></span></h1>
+    <input id="placeSearch" type="text" inputmode="search" autocomplete="off" placeholder="🔎 Find a place or landmark…">
+    <select id="decorSelect"></select>
+    <button id="searchBtn">Search this area</button>
+    <div class="place-results" id="placeResults"></div>
 </div>
 <div id="map"></div>
 <button class="fab" id="locateBtn" title="My location">📍</button>
+<div class="zoombadge" id="zoomBadge" title="Current zoom (search needs ≥ 13)"></div>
 <div class="status" id="status">👆 Choose a decor type, then tap “Search this area”.</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+
 <script>
 /* ---- Decor → OpenStreetMap tag mapping (from pikminwiki.com/Decor_Pikmin) ----
    Ordered by specificity: the FIRST rule that matches a POI's tags wins.
    cuisine-based decors are listed first so a "restaurant" tagged cuisine=sushi
    resolves to Sushi rather than the generic Restaurant. */
 const DECOR_RULES = [
-  // --- cuisine specialisations (highest priority) ---
-  { name:"Sushi Restaurant", emoji:"🍣", color:"#e91e63", tags:[["cuisine","sushi"]] },
-  { name:"Ramen Restaurant", emoji:"🍜", color:"#ff7043", tags:[["cuisine","chinese"],["cuisine","noodle"],["cuisine","ramen"],["cuisine","udon"],["cuisine","soba"]] },
-  { name:"Italian Restaurant", emoji:"🍕", color:"#c62828", tags:[["cuisine","pizza"],["cuisine","mediterranean"],["cuisine","italian"]] },
-  { name:"Curry Restaurant", emoji:"🍛", color:"#f9a825", tags:[["cuisine","curry"],["cuisine","indian"],["cuisine","sri_lankan"]] },
-  { name:"Mexican Restaurant", emoji:"🌮", color:"#8d6e63", tags:[["cuisine","mexican"]] },
-  { name:"Korean Restaurant", emoji:"🍲", color:"#d84315", tags:[["cuisine","korean"]] },
-  // --- shops (specific) ---
-  { name:"Sweetshop", emoji:"🍬", color:"#f06292", tags:[["shop","pastry"]] },
-  { name:"Bakery", emoji:"🥐", color:"#c69c6d", tags:[["shop","bakery"]] },
-  { name:"Art Gallery", emoji:"🎨", color:"#7e57c2", tags:[["shop","art"]] },
-  { name:"Hair Salon", emoji:"💇", color:"#ec407a", tags:[["shop","hairdresser"]] },
-  { name:"Clothes Store", emoji:"👕", color:"#5c6bc0", tags:[["shop","clothes"],["shop","shoes"]] },
-  { name:"Corner Store", emoji:"🏪", color:"#26a69a", tags:[["shop","convenience"]] },
-  { name:"Supermarket", emoji:"🛒", color:"#66bb6a", tags:[["shop","supermarket"]] },
-  { name:"Library & Bookstore", emoji:"📚", color:"#8d6e63", tags:[["shop","books"],["amenity","library"]] },
-  { name:"Makeup Store", emoji:"💄", color:"#ad1457", tags:[["shop","department_store"]] },
-  { name:"Appliances Store", emoji:"🔌", color:"#455a64", tags:[["shop","appliance"],["shop","computer"],["shop","electronics"]] },
-  { name:"DIY Store", emoji:"🔧", color:"#6d4c41", tags:[["shop","doityourself"],["shop","hardware"]] },
-  { name:"Laundromat", emoji:"🧺", color:"#4dd0e1", tags:[["shop","laundry"],["shop","dry_cleaning"]] },
-  { name:"Stationery Store", emoji:"✏️", color:"#9575cd", tags:[["shop","stationery"],["shop","craft"]] },
-  // --- amenities & food (generic) ---
-  { name:"Burger Place", emoji:"🍔", color:"#ff9800", tags:[["amenity","fast_food"]] },
-  { name:"Café", emoji:"☕", color:"#795548", tags:[["amenity","cafe"]] },
-  { name:"Restaurant", emoji:"🍽️", color:"#ef5350", tags:[["amenity","restaurant"]] },
-  { name:"Movie Theater", emoji:"🎬", color:"#5e35b1", tags:[["amenity","cinema"]] },
-  { name:"Pharmacy", emoji:"💊", color:"#26c6da", tags:[["amenity","pharmacy"]] },
-  { name:"Post Office", emoji:"📮", color:"#e53935", tags:[["amenity","post_office"]] },
-  { name:"University & College", emoji:"🎓", color:"#3949ab", tags:[["amenity","university"],["amenity","college"]] },
-  { name:"Shrine & Temple", emoji:"⛩️", color:"#d32f2f", tags:[["amenity","place_of_worship"]] },
-  // --- leisure / tourism ---
-  { name:"Park", emoji:"🌳", color:"#43a047", tags:[["leisure","park"]] },
-  { name:"Stadium", emoji:"🏟️", color:"#00897b", tags:[["leisure","stadium"]] },
-  { name:"Zoo", emoji:"🦁", color:"#fbc02d", tags:[["tourism","zoo"]] },
-  { name:"Theme Park", emoji:"🎡", color:"#f4511e", tags:[["tourism","theme_park"]] },
-  { name:"Hotel", emoji:"🏨", color:"#5c6bc0", tags:[["tourism","hotel"]] },
-  // --- transport ---
-  { name:"Station", emoji:"🚉", color:"#455a64", tags:[["railway","station"],["building","train_station"]] },
-  { name:"Bus Stop", emoji:"🚏", color:"#78909c", tags:[["highway","bus_stop"]] },
-  { name:"Airport", emoji:"✈️", color:"#0277bd", tags:[["aeroway","aerodrome"]] },
-  // --- nature ---
-  { name:"Waterside", emoji:"💧", color:"#039be5", tags:[["natural","water"]] },
-  { name:"Beach", emoji:"🏖️", color:"#fdd835", tags:[["natural","beach"]] },
-  { name:"Forest", emoji:"🌲", color:"#2e7d32", tags:[["natural","wood"],["landuse","forest"]] },
-  { name:"Mountain", emoji:"⛰️", color:"#6d4c41", tags:[["natural","peak"]] },
-  { name:"Bridge", emoji:"🌉", color:"#8d6e63", tags:[["bridge","yes"]] },
+    // --- cuisine specialisations (highest priority) ---
+    { name:"Sushi Restaurant", emoji:"🍣", color:"#e91e63", tags:[["cuisine","sushi"]] },
+    { name:"Ramen Restaurant", emoji:"🍜", color:"#ff7043", tags:[["cuisine","chinese"],["cuisine","noodle"],["cuisine","ramen"],["cuisine","udon"],["cuisine","soba"]] },
+    { name:"Italian Restaurant", emoji:"🍕", color:"#c62828", tags:[["cuisine","pizza"],["cuisine","mediterranean"],["cuisine","italian"]] },
+    { name:"Curry Restaurant", emoji:"🍛", color:"#f9a825", tags:[["cuisine","curry"],["cuisine","indian"],["cuisine","sri_lankan"]] },
+    { name:"Mexican Restaurant", emoji:"🌮", color:"#8d6e63", tags:[["cuisine","mexican"]] },
+    { name:"Korean Restaurant", emoji:"🍲", color:"#d84315", tags:[["cuisine","korean"]] },
+    // --- shops (specific) ---
+    { name:"Sweetshop", emoji:"🍬", color:"#f06292", tags:[["shop","pastry"]] },
+    { name:"Bakery", emoji:"🥐", color:"#c69c6d", tags:[["shop","bakery"]] },
+    { name:"Art Gallery", emoji:"🎨", color:"#7e57c2", tags:[["shop","art"]] },
+    { name:"Hair Salon", emoji:"💇", color:"#ec407a", tags:[["shop","hairdresser"]] },
+    { name:"Clothes Store", emoji:"👕", color:"#5c6bc0", tags:[["shop","clothes"],["shop","shoes"]] },
+    { name:"Corner Store", emoji:"🏪", color:"#26a69a", tags:[["shop","convenience"]] },
+    { name:"Supermarket", emoji:"🛒", color:"#66bb6a", tags:[["shop","supermarket"]] },
+    { name:"Library & Bookstore", emoji:"📚", color:"#8d6e63", tags:[["shop","books"],["amenity","library"]] },
+    { name:"Makeup Store", emoji:"💄", color:"#ad1457", tags:[["shop","department_store"]] },
+    { name:"Appliances Store", emoji:"🔌", color:"#455a64", tags:[["shop","appliance"],["shop","computer"],["shop","electronics"]] },
+    { name:"DIY Store", emoji:"🔧", color:"#6d4c41", tags:[["shop","doityourself"],["shop","hardware"]] },
+    { name:"Laundromat", emoji:"🧺", color:"#4dd0e1", tags:[["shop","laundry"],["shop","dry_cleaning"]] },
+    { name:"Stationery Store", emoji:"✏️", color:"#9575cd", tags:[["shop","stationery"],["shop","craft"]] },
+    // --- amenities & food (generic) ---
+    { name:"Burger Place", emoji:"🍔", color:"#ff9800", tags:[["amenity","fast_food"]] },
+    { name:"Café", emoji:"☕", color:"#795548", tags:[["amenity","cafe"]] },
+    { name:"Restaurant", emoji:"🍽️", color:"#ef5350", tags:[["amenity","restaurant"]] },
+    { name:"Movie Theater", emoji:"🎬", color:"#5e35b1", tags:[["amenity","cinema"]] },
+    { name:"Pharmacy", emoji:"💊", color:"#26c6da", tags:[["amenity","pharmacy"]] },
+    { name:"Post Office", emoji:"📮", color:"#e53935", tags:[["amenity","post_office"]] },
+    { name:"University & College", emoji:"🎓", color:"#3949ab", tags:[["amenity","university"],["amenity","college"]] },
+    { name:"Shrine & Temple", emoji:"⛩️", color:"#d32f2f", tags:[["amenity","place_of_worship"]] },
+    // --- leisure / tourism ---
+    { name:"Park", emoji:"🌳", color:"#43a047", tags:[["leisure","park"]] },
+    { name:"Stadium", emoji:"🏟️", color:"#00897b", tags:[["leisure","stadium"]] },
+    { name:"Zoo", emoji:"🦁", color:"#fbc02d", tags:[["tourism","zoo"]] },
+    { name:"Theme Park", emoji:"🎡", color:"#f4511e", tags:[["tourism","theme_park"]] },
+    { name:"Hotel", emoji:"🏨", color:"#5c6bc0", tags:[["tourism","hotel"]] },
+    // --- transport ---
+    { name:"Station", emoji:"🚉", color:"#455a64", tags:[["railway","station"],["building","train_station"]] },
+    { name:"Bus Stop", emoji:"🚏", color:"#78909c", tags:[["highway","bus_stop"]] },
+    { name:"Airport", emoji:"✈️", color:"#0277bd", tags:[["aeroway","aerodrome"]] },
+    // --- nature ---
+    { name:"Waterside", emoji:"💧", color:"#039be5", tags:[["natural","water"]] },
+    { name:"Beach", emoji:"🏖️", color:"#fdd835", tags:[["natural","beach"]] },
+    { name:"Forest", emoji:"🌲", color:"#2e7d32", tags:[["natural","wood"],["landuse","forest"]] },
+    { name:"Mountain", emoji:"⛰️", color:"#6d4c41", tags:[["natural","peak"]] },
+    { name:"Bridge", emoji:"🌉", color:"#8d6e63", tags:[["bridge","yes"]] },
 ];
 
 /* Resolve a POI's tag object to a decor rule (or null). cuisine values can be
    semicolon-separated, e.g. "sushi;japanese". */
-function resolveDecor(tags) {
-  const cuisines = (tags.cuisine || "").split(";").map(s => s.trim());
-  for (const rule of DECOR_RULES) {
-    for (const [k, v] of rule.tags) {
-      if (k === "cuisine") {
-        if (cuisines.includes(v)) return rule;
-      } else if (tags[k] === v) {
-        return rule;
+  function resolveDecor(tags) {
+    const cuisines = (tags.cuisine || "").split(";").map(s => s.trim());
+    for (const rule of DECOR_RULES) {
+     for (const [k, v] of rule.tags) {
+        if (k === "cuisine") {
+          if (cuisines.includes(v)) return rule;
+        } else if (tags[k] === v) {
+          return rule;
+        }
       }
     }
+    return null;
   }
-  return null;
-}
 
 /* ---------- Version (bump on every release) ---------- */
-const APP_VERSION = "v9";
+const APP_VERSION = "v10";
 document.getElementById("ver").textContent = APP_VERSION;
 
 /* ---------- Map setup ---------- */
-const map = L.map("map", { zoomControl:false }).setView([25.0375, 121.5637], 15); // Taipei Main Station
+const map = L.map("map", { zoomControl:false }).setView([25.0375, 121.5637], 16); // Taipei Main Station
 L.control.zoom({ position:"bottomright" }).addTo(map);
 L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
   maxZoom:19, attribution:'© OpenStreetMap'
 }).addTo(map);
+
+// Live zoom indicator; turns red below 13 (the minimum zoom to search).
+const zoomBadge = document.getElementById("zoomBadge");
+const updateZoomBadge = () => {
+  const z = map.getZoom();
+  zoomBadge.textContent = "z" + z;
+  zoomBadge.classList.toggle("low", z < 16);
+};
+map.on("zoomend", updateZoomBadge);
+updateZoomBadge();
 
 /* ---------- Decor filter dropdown ---------- */
 const sel = document.getElementById("decorSelect");
