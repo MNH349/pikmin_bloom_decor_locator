@@ -31,5 +31,5 @@ etc.) take priority over generic restaurants (Chef Hat).
 ## Notes / limits
 - Uses the free public **Overpass API**. The search time depends on the server speed of OSM
   - v9 uses parallel querying and caching to improve search speed, but ultimately still depends on the server
-- Requires zoom level ≥ 16 before it searches, to keep queries reasonable.
+- Suggests zoom level ≥ 16 (default) before it searches, to keep queries reasonable.
 - The newer version of the app will be automatically deployed if you save it on the home screen
