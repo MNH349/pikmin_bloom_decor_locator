@@ -82,7 +82,7 @@
 </div>
 <div id="map"></div>
 <button class="fab" id="locateBtn" title="My location">📍</button>
-<div class="status" id="status">Pick a decor type, then “Search this area”.</div>
+<div class="status" id="status">👆 Choose a decor type, then tap “Search this area”.</div>
 
 <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
@@ -157,7 +157,7 @@ function resolveDecor(tags) {
 }
 
 /* ---------- Version (bump on every release) ---------- */
-const APP_VERSION = "v8";
+const APP_VERSION = "v9";
 document.getElementById("ver").textContent = APP_VERSION;
 
 /* ---------- Map setup ---------- */
@@ -243,6 +243,60 @@ async function overpassFetch(query) {
   }
 }
 
+// Clear the layer and drop a pin for every element matching `choice`; returns count.
+function renderDecor(elements, choice) {
+  layer.clearLayers();
+  let count = 0;
+  for (const el of elements) {
+    const lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon;
+    if (lat == null || lon == null || !el.tags) continue;
+    const decor = resolveDecor(el.tags);
+    if (!decor) continue;
+    if (choice !== "__all" && decor !== DECOR_RULES[+choice]) continue;
+    count++;
+    const name = el.tags["name:en"] || el.tags.name || "(unnamed)";
+    const matched = decor.tags.find(([k,v]) =>
+      k==="cuisine" ? (el.tags.cuisine||"").split(";").includes(v) : el.tags[k]===v);
+    L.marker([lat,lon], {
+      icon: L.divIcon({
+        className:"decor-pin",
+        html:`<div class="decor-pin-inner" style="background:${decor.color}">${decor.emoji}</div>`,
+        iconSize:[30,30], iconAnchor:[15,15], popupAnchor:[0,-15]
+      })
+    }).bindPopup(
+      `<div class="popup-decor">${decor.emoji} ${decor.name}</div>`+
+      `<div class="popup-name">${name}</div>`+
+      `<div class="popup-tag">${matched[0]}=${matched[1]}</div>`+
+      `<div class="popup-links" style="margin-top:6px">`+
+        `<a href="https://maps.apple.com/?q=${lat},${lon}">Apple Maps</a>`+
+        `<a href="https://www.google.com/maps/search/?api=1&query=${lat},${lon}">Google</a>`+
+      `</div>`
+    ).addTo(layer);
+  }
+  return count;
+}
+function labelFor(choice) {
+  return choice === "__all" ? "decor sites" : DECOR_RULES[+choice].name + " sites";
+}
+
+// ---- Result cache: reuse a prior fetch whose area covers the current view ----
+// Each search fetches a padded box and caches it, so panning/zooming within that
+// box (or revisiting it) renders instantly with no network call.
+const CACHE_TTL = 30 * 60 * 1000;   // 30 min
+const cacheEntries = [];            // { choice, bounds:LatLngBounds, ts, elements }
+function cacheGet(choice, view) {
+  const now = Date.now();
+  for (let i = cacheEntries.length - 1; i >= 0; i--) {
+    const e = cacheEntries[i];
+    if (e.choice === choice && now - e.ts < CACHE_TTL && e.bounds.contains(view)) return e.elements;
+  }
+  return null;
+}
+function cachePut(choice, bounds, elements) {
+  cacheEntries.push({ choice, bounds, ts: Date.now(), elements });
+  if (cacheEntries.length > 24) cacheEntries.shift();   // cap memory
+}
+
 let inFlight = false;
 // Self-calibrating time estimate (ms), seeded then updated with each real query.
 const lastMs = { all: 15000, single: 6000 };
@@ -253,9 +307,19 @@ async function search() {
     setStatus("🔍 Zoom in a bit more, then search."); return;
   }
   const choice = sel.value;
-  const rules = choice === "__all" ? DECOR_RULES : [DECOR_RULES[+choice]];
   const heavy = choice === "__all";
   const mode = heavy ? "all" : "single";
+  const view = map.getBounds();
+
+  // Cache hit → instant, no network.
+  const cached = cacheGet(choice, view);
+  if (cached) {
+    const count = renderDecor(cached, choice);
+    setStatus(count ? `✅ ${count} ${labelFor(choice)} · cached` : `No ${labelFor(choice)} found here`);
+    return;
+  }
+
+  const rules = heavy ? DECOR_RULES : [DECOR_RULES[+choice]];
   inFlight = true;
   const btn = document.getElementById("searchBtn");
   btn.classList.add("loading"); btn.disabled = true; btn.textContent = "Searching…";
@@ -268,37 +332,11 @@ async function search() {
     setStatus(`<span class="spin">⏳</span> Searching… ${s}s <span style="opacity:.7">/ ~${est}s est</span>`);
   }, 200);
   try {
-    const data = await overpassFetch(buildQuery(rules, map.getBounds()));
-    layer.clearLayers();
-    let count = 0;
-    for (const el of data.elements) {
-      const lat = el.lat ?? el.center?.lat, lon = el.lon ?? el.center?.lon;
-      if (lat == null || lon == null || !el.tags) continue;
-      const decor = resolveDecor(el.tags);
-      if (!decor) continue;
-      if (choice !== "__all" && decor !== DECOR_RULES[+choice]) continue;
-      count++;
-      const name = el.tags["name:en"] || el.tags.name || "(unnamed)";
-      const matched = decor.tags.find(([k,v]) =>
-        k==="cuisine" ? (el.tags.cuisine||"").split(";").includes(v) : el.tags[k]===v);
-      L.marker([lat,lon], {
-        icon: L.divIcon({
-          className:"decor-pin",
-          html:`<div class="decor-pin-inner" style="background:${decor.color}">${decor.emoji}</div>`,
-          iconSize:[30,30], iconAnchor:[15,15], popupAnchor:[0,-15]
-        })
-      }).bindPopup(
-        `<div class="popup-decor">${decor.emoji} ${decor.name}</div>`+
-        `<div class="popup-name">${name}</div>`+
-        `<div class="popup-tag">${matched[0]}=${matched[1]}</div>`+
-        `<div class="popup-links" style="margin-top:6px">`+
-          `<a href="https://maps.apple.com/?q=${lat},${lon}">Apple Maps</a>`+
-          `<a href="https://www.google.com/maps/search/?api=1&query=${lat},${lon}">Google</a>`+
-        `</div>`
-      ).addTo(layer);
-    }
-    const label = choice === "__all" ? "decor sites" : DECOR_RULES[+choice].name + " sites";
-    setStatus(count ? `✅ ${count} ${label} in view` : `No ${label} found in view`);
+    const queryBounds = view.pad(0.3);        // fetch a bit beyond the view so nearby pans reuse the cache
+    const data = await overpassFetch(buildQuery(rules, queryBounds));
+    cachePut(choice, queryBounds, data.elements);
+    const count = renderDecor(data.elements, choice);
+    setStatus(count ? `✅ ${count} ${labelFor(choice)} in this area` : `No ${labelFor(choice)} found here`);
   } catch (e) {
     setStatus("⚠️ Overpass server busy — tap “Search this area” to retry.");
   } finally {
@@ -385,8 +423,8 @@ placeInput.addEventListener("keydown", (e) => {
 // Tapping the map dismisses the results list.
 map.on("click", clearPlaceResults);
 
-// initial search
-map.whenReady(search);
+// No auto-search on load — the first search is manual (avoids a slow blocking
+// query before the user has even chosen where/what to look for).
 </script>
 </body>
 </html>
