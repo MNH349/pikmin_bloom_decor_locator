@@ -157,7 +157,7 @@ function resolveDecor(tags) {
 }
 
 /* ---------- Version (bump on every release) ---------- */
-const APP_VERSION = "v7";
+const APP_VERSION = "v8";
 document.getElementById("ver").textContent = APP_VERSION;
 
 /* ---------- Map setup ---------- */
@@ -179,7 +179,11 @@ sel.innerHTML = '<option value="__all">All decor types</option>' +
 sel.value = String(cornerIdx);
 
 /* ---------- Overpass query ---------- */
-const OVERPASS = ["https://overpass-api.de/api/interpreter","https://overpass.kumi.systems/api/interpreter"];
+const OVERPASS = [
+  "https://overpass.private.coffee/api/interpreter",
+  "https://overpass.kumi.systems/api/interpreter",
+  "https://overpass-api.de/api/interpreter",
+];
 let layer = L.markerClusterGroup({
   maxClusterRadius: 50,
   spiderfyOnMaxZoom: true,
@@ -196,29 +200,47 @@ function buildQuery(rules, b) {
     const s = `nwr["${k}"="${v}"](${bbox});`;
     if (!seen.has(s)) { seen.add(s); stmts.push(s); }
   }
-  return `[out:json][timeout:40];(${stmts.join("")});out center tags;`;
+  return `[out:json][timeout:25];(${stmts.join("")});out center tags;`;
 }
 
-// Overpass can return HTTP 200 with an empty result + a "remark" when the
-// server-side query times out or is throttled. Treat that as a retryable error
-// so we fall through to the mirror / retry instead of showing "0 results".
+// Speed: fire the same query at every mirror at once and use whichever answers
+// FIRST, aborting the rest — so one overloaded server can't hold us up.
+// Overpass can also return HTTP 200 with an empty result + a "remark" when the
+// server-side query times out/throttles; treat that as a failure for that mirror
+// so a healthy mirror wins instead of us showing a false "0 results".
 async function overpassFetch(query) {
-  let lastErr;
-  for (let pass = 0; pass < 2; pass++) {
-    for (const url of OVERPASS) {
-      try {
-        const res = await fetch(url, { method:"POST", body:"data="+encodeURIComponent(query) });
-        if (!res.ok) throw new Error("HTTP "+res.status);
+  const body = "data=" + encodeURIComponent(query);
+  let emptyEver = false;   // some mirror returned a clean 0-result across the passes
+  // One pass fires the query at every mirror at once. A NON-EMPTY result fulfills
+  // immediately and wins (fast). Empty-with-remark = a server timeout (fail).
+  // Clean-empty is treated as a failure too, so a slower mirror that actually has
+  // data still beats a fast empty one — this pass only rejects if nothing returned data.
+  const runPass = () => {
+    const controllers = OVERPASS.map(() => new AbortController());
+    const timers = controllers.map(c => setTimeout(() => c.abort(), 30000)); // hard cap
+    const attempts = OVERPASS.map((url, i) =>
+      fetch(url, { method:"POST", body, signal: controllers[i].signal }).then(async res => {
+        if (!res.ok) throw new Error("HTTP " + res.status);
         const json = await res.json();
-        if ((!json.elements || !json.elements.length) && json.remark) {
-          throw new Error("overpass busy: "+json.remark);
-        }
+        const empty = !json.elements || !json.elements.length;
+        if (empty && json.remark) throw new Error("busy");
+        if (empty) { emptyEver = true; throw new Error("empty"); }
         return json;
-      } catch (e) { lastErr = e; }
-    }
-    await new Promise(r => setTimeout(r, 1500)); // brief backoff before retrying
+      })
+    );
+    return Promise.any(attempts).then(json => {
+      controllers.forEach((c, k) => { clearTimeout(timers[k]); c.abort(); });
+      return json;
+    }, err => { timers.forEach(clearTimeout); throw err; });
+  };
+  // Two passes: a "0 results" is only trusted once a confirming pass also finds
+  // nothing, so a transient overload-empty from one mirror can't fake an empty map.
+  try { return await runPass(); }
+  catch (e1) {
+    await new Promise(r => setTimeout(r, 1200));
+    try { return await runPass(); }
+    catch (e2) { if (emptyEver) return { elements: [] }; throw e2; }
   }
-  throw lastErr;
 }
 
 let inFlight = false;
