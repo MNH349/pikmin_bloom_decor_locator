@@ -1,5 +1,5 @@
 {
-  "name": "Pikmin Decor Finder · Northern Taiwan",
+  "name": "Pikmin Decor Finder",
   "short_name": "Decor Finder",
   "description": "Find which Northern Taiwan OpenStreetMap sites give which Pikmin Bloom decor.",
   "start_url": "./index.html",
